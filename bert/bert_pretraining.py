@@ -46,11 +46,15 @@ from transformers import (
     set_seed,
 )
 from transformers.utils import get_full_repo_name, send_example_telemetry
+# Disable cache
+# from datasets import disable_caching
+# disable_caching()
+# import datasets
+# datasets.config.IN_MEMORY_MAX_SIZE = 214748364800
 
 
 MODEL_CONFIG_CLASSES = list(FLAX_MODEL_FOR_MASKED_LM_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
-
 
 @dataclass
 class TrainingArguments:
@@ -199,16 +203,19 @@ class DataTrainingArguments:
         metadata={"help": "Whether distinct lines of text in the dataset are to be handled as distinct sequences."},
     )
 
-    def __post_init__(self):
-        if self.train_file is None and self.validation_file is None:
-            raise ValueError("Need either a dataset name or a training/validation file.")
-        else:
-            if self.train_file is not None:
-                extension = self.train_file.split(".")[-1]
-                assert extension in ["csv", "json", "txt"], "`train_file` should be a csv, a json or a txt file."
-            if self.validation_file is not None:
-                extension = self.validation_file.split(".")[-1]
-                assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, a json or a txt file."
+    # def __post_init__(self):
+    #     if self.train_file is None and self.validation_file is None:
+    #         raise ValueError("Need either a dataset name or a training/validation file.")
+    #     else:
+    #         if self.train_file is not None:
+    #             if isinstance(self.train_file, str):
+    #                 extension = self.train_file.split(".")[-1]
+    #             else:
+    #                 extension = self.train_file[0].split(".")[-1]
+    #             assert extension in ["csv", "json", "txt", "parquet"], "`train_file` should be a csv, a json or a txt file."
+    #         if self.validation_file is not None:
+    #             extension = self.validation_file.split(".")[-1]
+    #             assert extension in ["csv", "json", "txt", "parquet"], "`validation_file` should be a csv, a json or a txt file."
 
 
 @flax.struct.dataclass
@@ -360,29 +367,36 @@ def main():
     #
     # In distributed training, the load_dataset function guarantees that only one local process can concurrently
     # download the dataset.
+    data_args.train_file = PROCESSED_FILES
+    # print(data_args.train_file)
     assert data_args.train_file is not None, True
     data_files = {}
     if data_args.train_file is not None:
         data_files["train"] = data_args.train_file
     if data_args.validation_file is not None:
         data_files["validation"] = data_args.validation_file
-    extension = data_args.train_file.split(".")[-1]
+    if isinstance(data_args.train_file, str):
+        extension = data_args.train_file.split(".")[-1]
+    else:
+        extension = data_args.train_file[0].split(".")[-1]
     if extension == "txt":
         extension = "text"
-    datasets = load_dataset(
+    print(data_files)
+    print(extension)
+    tokenized_datasets = load_dataset(  # load pandas.DataFrame data, created by bert/create_pretraining_data.py
         extension,
         data_files=data_files,
         cache_dir=model_args.cache_dir,
     )
 
-    if "validation" not in datasets.keys():  # only provide train_file, automatically split to train and validation
-        datasets["validation"] = load_dataset(
+    if "validation" not in tokenized_datasets.keys():  # only provide train_file, automatically split to train and validation
+        tokenized_datasets["validation"] = load_dataset(
             extension,
             data_files=data_files,
             split=f"train[:{data_args.validation_split_percentage}%]",
             cache_dir=model_args.cache_dir,
         )
-        datasets["train"] = load_dataset(
+        tokenized_datasets["train"] = load_dataset(
             extension,
             data_files=data_files,
             split=f"train[{data_args.validation_split_percentage}%:]",
@@ -430,83 +444,83 @@ def main():
 
     # Preprocessing the datasets.
     # First we tokenize all the texts.
-    if training_args.do_train:
-        column_names = datasets["train"].column_names
-    else:
-        column_names = datasets["validation"].column_names
-    assert "content" in column_names, True
-    text_column_name = "content" if "content" in column_names else column_names[0]
+    # if training_args.do_train:
+    #     column_names = datasets["train"].column_names
+    # else:
+    #     column_names = datasets["validation"].column_names
+    # assert "content" in column_names, True
+    # text_column_name = "content" if "content" in column_names else column_names[0]
 
-    max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
+    # max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
 
-    if data_args.line_by_line:
-        # When using line_by_line, we just tokenize each nonempty line.
-        padding = "max_length" if data_args.pad_to_max_length else False
+    # if data_args.line_by_line:
+    #     # When using line_by_line, we just tokenize each nonempty line.
+    #     padding = "max_length" if data_args.pad_to_max_length else False
 
-        def tokenize_function(examples):
-            # Remove empty lines
-            examples = [line for line in examples if len(line) > 0 and not line.isspace()]
-            return tokenizer(
-                examples,
-                return_special_tokens_mask=True,
-                padding=padding,
-                truncation=True,
-                max_length=max_seq_length,
-            )
+    #     def tokenize_function(examples):
+    #         # Remove empty lines
+    #         examples = [line for line in examples if len(line) > 0 and not line.isspace()]
+    #         return tokenizer(
+    #             examples,
+    #             return_special_tokens_mask=True,
+    #             padding=padding,
+    #             truncation=True,
+    #             max_length=max_seq_length,
+    #         )
 
-        tokenized_datasets = datasets.map(
-            tokenize_function,
-            input_columns=[text_column_name],
-            batched=True,
-            num_proc=data_args.preprocessing_num_workers,
-            remove_columns=column_names,
-            load_from_cache_file=not data_args.overwrite_cache,
-        )
+    #     tokenized_datasets = datasets.map(
+    #         tokenize_function,
+    #         input_columns=[text_column_name],
+    #         batched=True,
+    #         num_proc=data_args.preprocessing_num_workers,
+    #         remove_columns=column_names,
+    #         load_from_cache_file=not data_args.overwrite_cache,
+    #     )
 
-    else:
-        # Otherwise, we tokenize every text, then concatenate them together before splitting them in smaller parts.
-        # We use `return_special_tokens_mask=True` because DataCollatorForLanguageModeling (see below) is more
-        # efficient when it receives the `special_tokens_mask`.
-        def tokenize_function(examples):
-            return tokenizer(examples[text_column_name], return_special_tokens_mask=True)
+    # else:
+    #     # Otherwise, we tokenize every text, then concatenate them together before splitting them in smaller parts.
+    #     # We use `return_special_tokens_mask=True` because DataCollatorForLanguageModeling (see below) is more
+    #     # efficient when it receives the `special_tokens_mask`.
+    #     def tokenize_function(examples):
+    #         return tokenizer(examples[text_column_name], return_special_tokens_mask=True)
 
-        tokenized_datasets = datasets.map(
-            tokenize_function,
-            batched=True,
-            num_proc=data_args.preprocessing_num_workers,
-            remove_columns=column_names,
-            load_from_cache_file=not data_args.overwrite_cache,
-        )
+    #     tokenized_datasets = datasets.map(
+    #         tokenize_function,
+    #         batched=True,
+    #         num_proc=data_args.preprocessing_num_workers,
+    #         remove_columns=column_names,
+    #         load_from_cache_file=not data_args.overwrite_cache,
+    #     )
 
-        # Main data processing function that will concatenate all texts from our dataset and generate chunks of
-        # max_seq_length.
-        def group_texts(examples):
-            # Concatenate all texts.
-            concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
-            total_length = len(concatenated_examples[list(examples.keys())[0]])
-            # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
-            # customize this part to your needs.
-            if total_length >= max_seq_length:
-                total_length = (total_length // max_seq_length) * max_seq_length
-            # Split by chunks of max_len.
-            result = {
-                k: [t[i : i + max_seq_length] for i in range(0, total_length, max_seq_length)]
-                for k, t in concatenated_examples.items()
-            }
-            return result
+    #     # Main data processing function that will concatenate all texts from our dataset and generate chunks of
+    #     # max_seq_length.
+    #     def group_texts(examples):
+    #         # Concatenate all texts.
+    #         concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
+    #         total_length = len(concatenated_examples[list(examples.keys())[0]])
+    #         # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
+    #         # customize this part to your needs.
+    #         if total_length >= max_seq_length:
+    #             total_length = (total_length // max_seq_length) * max_seq_length
+    #         # Split by chunks of max_len.
+    #         result = {
+    #             k: [t[i : i + max_seq_length] for i in range(0, total_length, max_seq_length)]
+    #             for k, t in concatenated_examples.items()
+    #         }
+    #         return result
 
-        # Note that with `batched=True`, this map processes 1,000 texts together, so group_texts throws away a
-        # remainder for each of those groups of 1,000 texts. You can adjust that batch_size here but a higher value
-        # might be slower to preprocess.
-        #
-        # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
-        # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map
-        tokenized_datasets = tokenized_datasets.map(
-            group_texts,
-            batched=True,
-            num_proc=data_args.preprocessing_num_workers,
-            load_from_cache_file=not data_args.overwrite_cache,
-        )
+    #     # Note that with `batched=True`, this map processes 1,000 texts together, so group_texts throws away a
+    #     # remainder for each of those groups of 1,000 texts. You can adjust that batch_size here but a higher value
+    #     # might be slower to preprocess.
+    #     #
+    #     # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
+    #     # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map
+    #     tokenized_datasets = tokenized_datasets.map(
+    #         group_texts,
+    #         batched=True,
+    #         num_proc=data_args.preprocessing_num_workers,
+    #         load_from_cache_file=not data_args.overwrite_cache,
+    #     )
 
     # Enable tensorboard only on the master node
     has_tensorboard = is_tensorboard_available()
@@ -528,25 +542,25 @@ def main():
 
     # Data collator
     # This one will take care of randomly masking the tokens.
-    data_collator = FlaxDataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=data_args.mlm_probability)
+    # data_collator = FlaxDataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=data_args.mlm_probability)
 
     # Initialize our training
     rng = jax.random.PRNGKey(training_args.seed)
     dropout_rngs = jax.random.split(rng, jax.local_device_count())
 
-    if model_args.model_name_or_path:
-        model = FlaxAutoModelForMaskedLM.from_pretrained(
-            model_args.model_name_or_path,
-            config=config,
-            seed=training_args.seed,
-            dtype=getattr(jnp, model_args.dtype),
-        )
-    else:
-        model = FlaxAutoModelForMaskedLM.from_config(
-            config,
-            seed=training_args.seed,
-            dtype=getattr(jnp, model_args.dtype),
-        )
+    # if model_args.model_name_or_path:
+    #     model = FlaxAutoModelForMaskedLM.from_pretrained(
+    #         model_args.model_name_or_path,
+    #         config=config,
+    #         seed=training_args.seed,
+    #         dtype=getattr(jnp, model_args.dtype),
+    #     )
+    # else:
+    model = FlaxAutoModelForMaskedLM.from_config(  # TODO model type?
+        config,
+        seed=training_args.seed,
+        dtype=getattr(jnp, model_args.dtype),
+    )
 
     # Store some constant
     num_epochs = int(training_args.num_train_epochs)
@@ -673,9 +687,10 @@ def main():
 
         # Gather the indexes for creating the batch and do a training step
         for step, batch_idx in enumerate(tqdm(train_batch_idx, desc="Training...", position=1)):
-            samples = [tokenized_datasets["train"][int(idx)] for idx in batch_idx]
-            model_inputs = data_collator(samples, pad_to_multiple_of=16)
+            # samples = [tokenized_datasets["train"][int(idx)] for idx in batch_idx]
+            # model_inputs = data_collator(samples, pad_to_multiple_of=16)
 
+            model_inputs = [tokenized_datasets["train"][int(idx)] for idx in batch_idx]
             # Model forward
             model_inputs = shard(model_inputs.data)
             state, train_metric, dropout_rngs = p_train_step(state, model_inputs, dropout_rngs)

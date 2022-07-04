@@ -1,0 +1,17 @@
+python3 bert_pretraining.py \
+	--model_type bert \
+	--model_name_or_path bert-base-chinese \
+	--output_dir /mnt/disks/persist/output \
+	--cache_dir gs://us-central1-f-wukong/jpm/bert/cache \
+	--do_train \
+	--do_eval \
+	--per_device_train_batch_size 64 \
+	--per_device_eval_batch_size 64 \
+	--learning_rate 5e-5 \
+	--num_train_epochs 10 \
+	--preprocessing_num_workers 50 \
+	--warmup_steps 2000 \
+	--logging_steps 500 \
+	--save_steps 500 \
+	--eval_steps 500 \
+	--seed 12387
