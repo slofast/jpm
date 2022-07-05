@@ -203,21 +203,6 @@ class DataTrainingArguments:
         metadata={"help": "Whether distinct lines of text in the dataset are to be handled as distinct sequences."},
     )
 
-    # def __post_init__(self):
-    #     if self.train_file is None and self.validation_file is None:
-    #         raise ValueError("Need either a dataset name or a training/validation file.")
-    #     else:
-    #         if self.train_file is not None:
-    #             if isinstance(self.train_file, str):
-    #                 extension = self.train_file.split(".")[-1]
-    #             else:
-    #                 extension = self.train_file[0].split(".")[-1]
-    #             assert extension in ["csv", "json", "txt", "parquet"], "`train_file` should be a csv, a json or a txt file."
-    #         if self.validation_file is not None:
-    #             extension = self.validation_file.split(".")[-1]
-    #             assert extension in ["csv", "json", "txt", "parquet"], "`validation_file` should be a csv, a json or a txt file."
-
-
 @flax.struct.dataclass
 class FlaxDataCollatorForLanguageModeling:
     """
@@ -367,41 +352,41 @@ def main():
     #
     # In distributed training, the load_dataset function guarantees that only one local process can concurrently
     # download the dataset.
-    data_args.train_file = PROCESSED_FILES
+    # data_args.train_file = PROCESSED_FILES
     # print(data_args.train_file)
-    assert data_args.train_file is not None, True
-    data_files = {}
-    if data_args.train_file is not None:
-        data_files["train"] = data_args.train_file
-    if data_args.validation_file is not None:
-        data_files["validation"] = data_args.validation_file
-    if isinstance(data_args.train_file, str):
-        extension = data_args.train_file.split(".")[-1]
-    else:
-        extension = data_args.train_file[0].split(".")[-1]
-    if extension == "txt":
-        extension = "text"
-    print(data_files)
-    print(extension)
-    tokenized_datasets = load_dataset(  # load pandas.DataFrame data, created by bert/create_pretraining_data.py
-        extension,
-        data_files=data_files,
-        cache_dir=model_args.cache_dir,
-    )
+    # assert data_args.train_file is not None, True
+    # data_files = {}
+    # if data_args.train_file is not None:
+    #     data_files["train"] = data_args.train_file
+    # if data_args.validation_file is not None:
+    #     data_files["validation"] = data_args.validation_file
+    # if isinstance(data_args.train_file, str):
+    #     extension = data_args.train_file.split(".")[-1]
+    # else:
+    #     extension = data_args.train_file[0].split(".")[-1]
+    # if extension == "txt":
+    #     extension = "text"
+    # print(data_files)
+    # print(extension)
+    # tokenized_datasets = load_dataset(  # load pandas.DataFrame data, created by bert/create_pretraining_data.py
+    #     extension,
+    #     data_files=data_files,
+    #     cache_dir=model_args.cache_dir,
+    # )
 
-    if "validation" not in tokenized_datasets.keys():  # only provide train_file, automatically split to train and validation
-        tokenized_datasets["validation"] = load_dataset(
-            extension,
-            data_files=data_files,
-            split=f"train[:{data_args.validation_split_percentage}%]",
-            cache_dir=model_args.cache_dir,
-        )
-        tokenized_datasets["train"] = load_dataset(
-            extension,
-            data_files=data_files,
-            split=f"train[{data_args.validation_split_percentage}%:]",
-            cache_dir=model_args.cache_dir,
-        )
+    # if "validation" not in tokenized_datasets.keys():  # only provide train_file, automatically split to train and validation
+    #     tokenized_datasets["validation"] = load_dataset(
+    #         extension,
+    #         data_files=data_files,
+    #         split=f"train[:{data_args.validation_split_percentage}%]",
+    #         cache_dir=model_args.cache_dir,
+    #     )
+    #     tokenized_datasets["train"] = load_dataset(
+    #         extension,
+    #         data_files=data_files,
+    #         split=f"train[{data_args.validation_split_percentage}%:]",
+    #         cache_dir=model_args.cache_dir,
+    #     )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
